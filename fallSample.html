@@ -1,0 +1,265 @@
+<html>
+
+<head>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/posenet@2.2.2/dist/posenet.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@3.11.0/dist/tf-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@3.11.0/dist/tf-converter.min.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@3.11.0/dist/tf-backend-webgl.min.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@0.0.6/dist/pose-detection.min.js"></script>
+
+
+    <!-- <script src="https://unpkg.com/@tensorflow/tfjs-core@2.4.0/dist/tf-core.js"></script>
+    <script src="https://unpkg.com/@tensorflow/tfjs-converter@2.4.0/dist/tf-converter.js"></script>
+    <script src="https://unpkg.com/@tensorflow/tfjs-backend-webgl@2.4.0/dist/tf-backend-webgl.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script> -->
+
+    <style>
+        /* 이미지에 캔버스를 겹쳐서 그릴때는 아래 주석 해제 */
+        canvas {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            top: 50%;
+            left: 50%;
+
+        }
+
+        video {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            top: 50%;
+            left: 50%;
+
+        }
+    </style>
+</head>
+
+<body>
+    <!-- test9.mov는 42프레임부터 넘어짐. -->
+    <video id="video" width="640" height="480" autoplay muted playsinline src='../images/test5.mp4'></video>
+    <!-- <video id="video" width="1200" height="1080" autoplay muted playsinline></video> -->
+    <canvas id="canvas"></canvas>
+</body>
+<!-- Place your code in the script tag below. You can also use an external .js file -->
+<script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById("canvas");
+    const context = canvas.getContext("2d");
+    const start = Date.now() / 1000;
+    const startTime = new Date();
+    let checkPoint = 0;
+    let checkRvalue = [];
+    let checkHSSCValue = [];
+    let prevHeadPosX = 0;
+    let prevHeadPosY = 0;
+
+    const colors = ['red', 'green', 'blue'];
+
+    let videoDuration;
+    video.onloadedmetadata = () =>{
+        videoDuration = video.duration;
+        console.log(videoDuration);
+    }
+    
+    let myReq;
+    // 웹캠 사용 시 주석 해제
+    // navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+    //     .then(function (stream) {
+    //         video.srcObject = stream;
+    //     });
+
+    posenet.load().then(model => {
+        video.onloadeddata = (e) => {
+            const predict = (makePredict, delay, duration) => {
+                let count = 0;
+                
+                const interval = setInterval(() => {
+                    if (delay * count >= duration) return clearInterval(interval);
+                    makePredict();
+                    count++;
+                    console.log(count);
+                }, delay);
+            };
+            const makePredict = () =>{
+                model.estimateSinglePose(video).then(pose => {
+                    console.log('Keypoints JSON', JSON.stringify(pose.keypoints));
+                    canvas.width = video.width;
+                    canvas.height = video.height;
+                    drawKeypoints(pose.keypoints, 0.1, context);
+                    drawSkeleton(pose.keypoints, 0.1, context);           
+                    
+                    totalHeadX = 0.0;
+                    totalHeadY = 0.0;
+
+                    let head = [];
+                    for (let i = 0; i < 7; i++) {
+                        head.push(pose.keypoints[i]);
+                        totalHeadX += pose.keypoints[i].position.x;
+                        totalHeadY += pose.keypoints[i].position.y;
+                    }
+                    let body = [];
+                    for(let i = 5; i < 13; i++){
+                        body.push(pose.keypoints[i]);
+                    }
+                    let leg = [];
+                    for(let i = 11; i < 17; i++){
+                        leg.push(pose.keypoints[i]);
+                    }
+                    drawBoundingBox(head, context);
+                    drawBoundingBox(body, context);
+                    drawBoundingBox(leg, context);
+
+                    if(prevHeadPosX == 0 && prevHeadPosY == 0){
+                        prevHeadPosX = totalHeadX / 7;
+                        prevHeadPosY = totalHeadY / 7;
+                    }
+                    else{
+                        let posneg = 1;
+                        if (prevHeadPosY < totalHeadY/7) posneg = -1;
+                        const distance = Math.sqrt(
+                            Math.pow(totalHeadX/7 - prevHeadPosX, 2) + 
+                            Math.pow(totalHeadY/7 - prevHeadPosY, 2)
+                        );
+                        const speed = posneg * (distance / 33);
+                        checkHSSCValue.push(speed);
+                        prevHeadPosX = totalHeadX/7;
+                        prevHeadPosY = totalHeadY/7;
+                    }
+
+
+                    const boundingBox = posenet.getBoundingBox(pose.keypoints);
+                    console.log("R값 : ", (boundingBox.maxX - boundingBox.minX) / (boundingBox.maxY - boundingBox.minY));
+                    checkRvalue.push((boundingBox.maxX - boundingBox.minX) / (boundingBox.maxY - boundingBox.minY).toFixed(2));
+                })
+            }
+
+            const download = () => {
+                
+                var data1 = JSON.stringify(checkRvalue);
+                var blob1 = new Blob([data1], {type: 'text/plain'});
+                var downloadLink = document.createElement('a');
+                downloadLink.href = URL.createObjectURL(blob1);
+                downloadLink.download = 'Rvalue.txt';
+                downloadLink.click();
+                
+
+                
+                var data2 = JSON.stringify(checkHSSCValue);
+                var blob2 = new Blob([data2], {type: 'text/plain'});
+                var downloadLink = document.createElement('a');
+                downloadLink.href = URL.createObjectURL(blob2);
+                downloadLink.download = 'HSSCvalue.txt';
+                downloadLink.click();
+                
+
+            }
+            setTimeout(download, 7000);
+
+            predict(makePredict, 33.3, videoDuration*1000);
+        }
+    })
+
+    console.log(checkRvalue);
+    console.log(checkHSSCValue);
+    // const download = () => {
+    //     console.log(checkRvalue);
+    //     var data = JSON.stringify(checkRvalue);
+    //     var blob = new Blob([data], {type: 'text/plain'});
+    //     console.log(blob);
+    //     var downloadLink = document.createElement('a');
+    //     downloadLink.href = URL.createObjectURL(blob);
+    //     downloadLink.download = 'myArray.txt';
+    //     downloadLink.click();
+    // }
+    // download();
+    
+
+    const color = 'aqua';
+    const boundingBoxColor = 'red';
+    const lineWidth = 2;
+
+    function toTuple({ y, x }) {
+        return [y, x];
+    }
+
+    function drawPoint(ctx, y, x, r, color) {
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, 2 * Math.PI);
+        ctx.fillStyle = color;
+        ctx.fill();
+    }
+
+    /**
+     * Draws a line on a canvas, i.e. a joint
+     */
+    function drawSegment([ay, ax], [by, bx], color, scale, ctx) {
+        ctx.beginPath();
+        ctx.moveTo(ax * scale, ay * scale);
+        ctx.lineTo(bx * scale, by * scale);
+        ctx.lineWidth = lineWidth;
+        ctx.strokeStyle = color;
+        ctx.stroke();
+    }
+
+    /**
+     * Draws a pose skeleton by looking up all adjacent keypoints/joints
+     */
+    function drawSkeleton(keypoints, minConfidence, ctx, scale = 1) {
+        const adjacentKeyPoints =
+            posenet.getAdjacentKeyPoints(keypoints, minConfidence);
+
+        adjacentKeyPoints.forEach((keypoints) => {
+            drawSegment(
+                toTuple(keypoints[0].position), toTuple(keypoints[1].position), color,
+                scale, ctx);
+        });
+    }
+
+    /**
+     * Draw pose keypoints onto a canvas
+     */
+    function drawKeypoints(keypoints, minConfidence, ctx, scale = 1) {
+        for (let i = 0; i < keypoints.length; i++) {
+            const keypoint = keypoints[i];
+
+            if (keypoint.score < minConfidence) {
+                continue;
+            }
+
+            const { y, x } = keypoint.position;
+            drawPoint(ctx, y * scale, x * scale, 3, color);
+        }
+    }
+
+    /**
+     * Draw the bounding box of a pose. For example, for a whole person standing
+     * in an image, the bounding box will begin at the nose and extend to one of
+     * ankles
+     */
+    function drawBoundingBox(keypoints, ctx) {
+        const boundingBox = posenet.getBoundingBox(keypoints);
+
+        ctx.rect(
+            boundingBox.minX, boundingBox.minY, boundingBox.maxX - boundingBox.minX,
+            boundingBox.maxY - boundingBox.minY);
+
+        ctx.strokeStyle = boundingBoxColor;
+        ctx.stroke();
+    }
+    // function drawBoundingBox(keypoints, ctx, c) {
+    //     const boundingBox = posenet.getBoundingBox(keypoints);
+
+    //     ctx.rect(
+    //         boundingBox.minX, boundingBox.minY, boundingBox.maxX - boundingBox.minX,
+    //         boundingBox.maxY - boundingBox.minY);
+
+    //     ctx.strokeStyle = c;
+    //     ctx.stroke();
+    // }
+</script>
+
+</html>
