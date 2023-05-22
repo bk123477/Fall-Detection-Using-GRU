@@ -15,3 +15,15 @@ GRU를 사용하여 낙상 감지 모델 구현
 ### 사용 Dataset
 1. URFD Dataset(이미지 파일을 영상으로 변환 후 사용)
 2. 자체 제작 Dataset(영상)
+
+![image](https://github.com/bk123477/Fall-Detection-Using-GRU/assets/59231609/55a70605-fcff-4e96-ad3e-69e3a6e92120)
+
+100 epoch 수행 시 모델의 train 정확도 99%, 모델의 validation 정확도 98.5%
+
+![image](https://github.com/bk123477/Fall-Detection-Using-GRU/assets/59231609/dc8ccf2a-2588-49ac-8fce-0b7d0e5affb9)
+
+모델의 정확도, 정밀도, 재현율, 특이도
+
+![image](https://github.com/bk123477/Fall-Detection-Using-GRU/assets/59231609/f24b9d69-c1fd-439a-815a-1b72d6bc84b1)
+
+모델의 F1-Score, 위양성율, ROC-curve 및 AUC
