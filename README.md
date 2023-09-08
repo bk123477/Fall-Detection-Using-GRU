@@ -10,8 +10,8 @@ GRU를 사용하여 낙상 감지 모델 구현
 1. PoseNet을 이용한 Skeletal Data 추출
 2. Tensorflow의 RNN 레이어 중 하나인 GRU를 이용하여 시계열 데이터 학습
 3. sklearn과 matplotlib를 통한 시각화 및 데이터 분석
-4. (추가 예정) React와 Tensorflow.js를 활용한 실시간 데이터 처리 및 낙상 감지 연구
-
+4. Tensorflow.js를 사용한 HTML 상에서의 실시간 낙상감지 구현
+   
 ### 사용 Dataset
 1. URFD Dataset(이미지 파일을 영상으로 변환 후 사용)
 2. 자체 제작 Dataset(영상)
@@ -27,3 +27,8 @@ GRU를 사용하여 낙상 감지 모델 구현
 ![image](https://github.com/bk123477/Fall-Detection-Using-GRU/assets/59231609/f24b9d69-c1fd-439a-815a-1b72d6bc84b1)
 
 모델의 F1-Score, 위양성율, ROC-curve 및 AUC
+
+![스크린샷 2023-09-08 오후 5 37 50](https://github.com/bk123477/Fall-Detection-Using-GRU/assets/59231609/38bf97cb-60ee-4850-bc24-59d060356ebc)
+
+낙상 감지 기법 아키텍처
+
