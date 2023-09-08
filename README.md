@@ -11,6 +11,7 @@ GRU를 사용하여 낙상 감지 모델 구현
 2. Tensorflow의 RNN 레이어 중 하나인 GRU를 이용하여 시계열 데이터 학습
 3. sklearn과 matplotlib를 통한 시각화 및 데이터 분석
 4. Tensorflow.js를 사용한 HTML 상에서의 실시간 낙상감지 구현
+5. posenet_multi7.html 파일을 이용해 동작 확인
    
 ### 사용 Dataset
 1. URFD Dataset(이미지 파일을 영상으로 변환 후 사용)
