@@ -1,0 +1,303 @@
+<html>
+
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/posenet@2.2.2/dist/posenet.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@3.11.0/dist/tf-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@3.11.0/dist/tf-converter.min.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@3.11.0/dist/tf-backend-webgl.min.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@0.0.6/dist/pose-detection.min.js"></script>
+
+    <style>
+        /* 이미지에 캔버스를 겹쳐서 그릴때는 아래 주석 해제 */
+        canvas {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            top: 50%;
+            left: 50%;
+
+        }
+
+        video {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            top: 50%;
+            left: 50%;
+        }
+
+        .fall-detection {
+            position: absolute;
+            left: 20px;
+            top: 40%;
+            width: 300px;
+            height: 100px;
+            background-color: #db1635;
+            text-align: center;
+            justify-content: center;
+        }
+
+    </style>
+</head>
+
+<body>
+    <div id="fallDiv" class="fall-detection">
+        <p id="text" style="font-size:20px; color:white;"> </p>
+    </div>
+    <video id="video" width="800" height="600" autoplay muted playsinline></video>
+    <canvas id="canvas">
+    </canvas>
+    <!-- <video id="video" width="800" height="600" autoplay muted playsinline src='../images/fall-03-cam0(cropped, slowly).mp4'></video> -->
+
+</body>
+
+<script>
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const text = document.getElementById("text");
+    const context = canvas.getContext("2d");
+
+    let checkRvalue = [];
+    let checkHSSCValue = [];
+    let checkOverlapValue = [];
+    let prevHeadPosX = 0.0;
+    let prevHeadPosY = 0.0;
+    let count = 0.0;
+    let overlapWidth = 0.0;
+    let overlapHeight = 0.0;
+    let overlapArea = 0.0;
+
+    // 웹캠 사용 시 주석 해제
+
+    navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        .then(function (stream) {
+            video.srcObject = stream;
+        })
+        .catch((err => {
+            console.log(err)
+        }))
+
+    posenet.load().then(model => {
+        video.onloadeddata = (e) => {
+            predict();
+        }
+
+        const gru_predict = async (checkRvalue, checkHSSCValue, checkOverlapValue) => {
+            /* newRList 생성과정 */
+            rList = checkRvalue.split(',');
+            newRList = [];
+
+            if (rList.length == 33) {
+                rList = rList.slice(1);
+                rList = rList.slice(0, rList.length - 2);
+            }
+            else {
+                rList = rList.slice(1);
+                rList = rList.slice(0, rList.length - 1);
+            }
+
+            i = rList.indexOf("[null");
+            delete rList[i];
+            delete rList[i - 1];
+
+            for (var rl in rList) {
+                var real = parseFloat(rList[rl]).toFixed(3);
+                newRList.push(real);
+            }
+
+            // console.log("newRList", newRList);
+
+            /* newHsscList 생성과정 */
+            hsscList = checkHSSCValue.split(',');
+            newHsscList = [];
+
+            if (hsscList.length == 32) {
+                hsscList = hsscList.slice(1);
+                hsscList = hsscList.slice(0, hsscList.length - 1);
+            }
+            else {
+                hsscList = hsscList.slice(1);
+            }
+
+            i = hsscList.indexOf("[null");
+            delete hsscList[i];
+            delete hsscList[i - 1];
+
+            for (var hl in hsscList) {
+                var real = parseFloat(hsscList[hl]).toFixed(3);
+                newHsscList.push(real);
+            }
+
+            // console.log("newHsscList", newHsscList);
+
+            /* newOverlapList 생성과정 */
+            overlapList = checkOverlapValue.split(',');
+            newOverlapList = [];
+
+            if (overlapList.length == 33) {
+                overlapList = overlapList.slice(1);
+                overlapList = overlapList.slice(0, overlapList.length - 2);
+            }
+            else {
+                overlapList = overlapList.slice(1);
+                overlapList = overlapList.slice(0, overlapList.length - 1);
+            }
+
+            i = overlapList.indexOf("[null");
+            delete overlapList[i];
+            delete overlapList[i - 1];
+
+            for (var ol in overlapList) {
+                var real = parseFloat(overlapList[ol]).toFixed(3);
+                newOverlapList.push(real);
+            }
+
+            // console.log("newOverlapList", newOverlapList);
+
+            var merged = newRList.concat(newHsscList, axis = 1);
+            merged = merged.slice(0, merged.length - 1);
+            merged = merged.concat(newOverlapList, axis = 1);
+            merged = merged.slice(0, merged.length - 1);
+            // console.log("merged", merged);
+
+            x = tf.tensor(merged, [1, 30, 3], 'float32');
+
+            const model = await tf.loadLayersModel('./model_f3_2.json');
+            const prediction = model.predict(x);
+            // console.log("prediction", prediction);
+            const predictionArray = prediction.dataSync();
+            // console.log("predictionArray", predictionArray);
+
+            var maxValue = 0;
+
+            var i=0;
+            for(i; i<predictionArray.length; i++){
+                if (predictionArray[i]<1 && predictionArray[i] > maxValue){
+                    maxValue = predictionArray[i];
+                }
+            }
+
+            if (maxValue > 0.5) {
+                console.log("낙상 감지 ", maxValue);
+                text.innerText = "낙상이 감지되었습니다!";
+                var divElement = document.getElementById("fallDiv");
+                divElement.style.backgroundColor = "red";
+            }
+            else {
+                console.log("낙상 비감지 ", maxValue);
+                text.innerText = "낙상이 감지되지 않았습니다!";
+                var divElement = document.getElementById("fallDiv");
+                divElement.style.backgroundColor = "blue";
+            }
+        }
+
+        function predict() {
+            // console.log("checkRvalue.length", checkRvalue.length);
+            // console.log("checkHSSCValue.length", checkHSSCValue.length);
+            // console.log("checkOverlapValue.length", checkOverlapValue.length);
+
+            if (checkOverlapValue.length % 32 == 0) {
+                // console.log("checkRvalue", checkRvalue);
+                // console.log("checkHSSCValue", checkHSSCValue);
+                // console.log("checkOverlapValue", checkOverlapValue);
+                gru_predict(JSON.stringify(checkRvalue), JSON.stringify(checkHSSCValue), JSON.stringify(checkOverlapValue));
+                checkRvalue = [];
+                checkHSSCValue = [];
+                checkOverlapValue = [];
+            }
+
+            model.estimateSinglePose(video).then(pose => {
+                canvas.width = video.width;
+                canvas.height = video.height;
+
+                // console.log('Keypoints JSON', JSON.stringify(pose.keypoints));
+
+                drawKeypoints(pose.keypoints, 0.1, context);
+                drawSkeleton(pose.keypoints, 0.1, context);
+
+                totalHeadX = 0.0;
+                totalHeadY = 0.0;
+
+                let head = [];
+                for (let i = 0; i < 7; i++) {
+                    head.push(pose.keypoints[i]);
+                    totalHeadX += pose.keypoints[i].position.x;
+                    totalHeadY += pose.keypoints[i].position.y;
+                }
+                let body = [];
+                for (let i = 5; i < 13; i++) {
+                    if (i == 7 || i == 8 || i == 9 || i == 10)
+                        continue;
+                    body.push(pose.keypoints[i]);
+                }
+                let leg = [];
+                for (let i = 11; i < 17; i++) {
+                    leg.push(pose.keypoints[i]);
+                }
+
+                const headBoundingBox = posenet.getBoundingBox(head);
+                //body_boundingbox = posenet.getBoundingBox(body);
+                const bodyBoundingBox = posenet.getBoundingBox(body);
+                headArea = (headBoundingBox.maxX - headBoundingBox.minX) * (headBoundingBox.maxY - headBoundingBox.minY);
+                if (headBoundingBox.maxY > bodyBoundingBox.minY) {
+                    overlapWidth = Math.max(0, Math.min(headBoundingBox.minX + (headBoundingBox.maxX - headBoundingBox.minX),
+                        bodyBoundingBox.minX + (bodyBoundingBox.maxX - bodyBoundingBox.minX)) -
+                        Math.max(headBoundingBox.minX, bodyBoundingBox.minX));
+                    overlapHeight = Math.max(0, Math.min(headBoundingBox.minY + (headBoundingBox.maxY - headBoundingBox.minY),
+                        bodyBoundingBox.minY + (bodyBoundingBox.maxY - bodyBoundingBox.minY)) -
+                        Math.max(headBoundingBox.minY, bodyBoundingBox.minY));
+                    overlapArea = overlapWidth * overlapHeight;
+                }
+                else {
+                    overlapArea = 0.0;
+                }
+                checkOverlapValue.push(overlapArea);
+
+                const legBoundingbox = posenet.getBoundingBox(leg);
+
+                if (headBoundingBox.minY < bodyBoundingBox.maxY + 10) {
+                    // console.log("머리, 몸통 segment 중첩!");
+                }
+
+                if (bodyBoundingBox.minY < legBoundingbox.maxY + 10) {
+                    // console.log("몸통, 다리 segment 중첩!");
+                }
+
+                drawBoundingBox(head, context);
+                drawBoundingBox(body, context);
+                drawBoundingBox(leg, context);
+
+                if (prevHeadPosX == 0 && prevHeadPosY == 0) {
+                    prevHeadPosX = totalHeadX / 7;
+                    prevHeadPosY = totalHeadY / 7;
+                }
+                else {
+                    let posneg = 1;
+                    if (prevHeadPosY < totalHeadY / 7) posneg = -1;
+                    const distance = Math.sqrt(
+                        Math.pow(totalHeadX / 7 - prevHeadPosX, 2) +
+                        Math.pow(totalHeadY / 7 - prevHeadPosY, 2)
+                    );
+                    const speed = posneg * (distance / 33);
+                    checkHSSCValue.push(speed);
+                    prevHeadPosX = totalHeadX / 7;
+                    prevHeadPosY = totalHeadY / 7;
+                }
+
+                const boundingBox = posenet.getBoundingBox(pose.keypoints);
+                // console.log("R값 : ", (boundingBox.maxX - boundingBox.minX) / (boundingBox.maxY - boundingBox.minY));
+                checkRvalue.push((boundingBox.maxX - boundingBox.minX) / (boundingBox.maxY - boundingBox.minY).toFixed(2));
+
+            });
+            requestAnimationFrame(function () {
+                predict()
+            })
+        }
+    })
+
+</script>
+<script src="posenet.js"></script>
+<script src="coco-ssd.js"></script>
+</html>
